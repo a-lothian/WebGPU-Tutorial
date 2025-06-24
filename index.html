@@ -1,0 +1,60 @@
+<!doctype html>
+
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>WebGPU Life</title>
+</head>
+
+<body>
+    <canvas width="512" height="512"></canvas>
+    <script type="module">
+        const canvas = document.querySelector("canvas");
+
+        // check WebGPU support
+        if (!navigator.gpu) {
+            throw new Error("WebGPU not supported on this browser.");
+        }
+
+        // check for compatible hardware
+        const adapter = await navigator.gpu.requestAdapter();
+        if (!adapter) {
+            throw new Error("No appropriate GPUAdapter found.");
+        }
+
+        // get interface with hardware
+        const device = await adapter.requestDevice();
+
+        // configure + link canvas
+        const context = canvas.getContext("webgpu");
+        const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
+        context.configure({
+            device: device,
+            format: canvasFormat,
+        });
+
+        // interface for providing GPU instructions
+        const encoder = device.createCommandEncoder();
+
+
+        const pass = encoder.beginRenderPass({
+            colorAttachments: [{
+                view: context.getCurrentTexture().createView(),
+                loadOp: "clear", // clear texture on start of render pass
+                clearValue: { r: 0, g: 0.25, b: 0.5, a: 1 },
+                storeOp: "store", // save results of renderpass onto texture 
+            }]
+        });
+
+        pass.end(); // end of instructions for this render pass
+
+        // const commandBuffer = encoder.finish(); // encodes the renderpass instructions into an object
+        // device.queue.submit([commandBuffer]); // submits instructions to the GPU's queue
+
+        device.queue.submit([encoder.finish()]); // submit instruction buffer without storing it instead
+
+    </script>
+</body>
+
+</html>
