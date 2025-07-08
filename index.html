@@ -10,7 +10,10 @@
 <body>
     <canvas width="512" height="512"></canvas>
     <script type="module">
+
         const GRID_SIZE = 32;
+        const UPDATE_INTERVAL = 500;
+        let step = 0; // count number of frames rendered
 
         const canvas = document.querySelector("canvas");
 
@@ -37,7 +40,7 @@
         });
 
         // interface for providing GPU instructions
-        const encoder = device.createCommandEncoder();
+        // const encoder = device.createCommandEncoder();
 
         // define geometery to render
         const vertices = new Float32Array([
@@ -84,17 +87,31 @@
 
         // Create buffer to track cell state using a STORAGE type
         const cellStateArray = new Uint32Array(GRID_SIZE * GRID_SIZE);
-        const cellStateStorage = device.createBuffer({
-            label: "Cell State",
-            size: cellStateArray.byteLength,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-        });
 
-        // fill every third cell
+        // create current and working copies of simulation
+        const cellStateStorage = [
+            device.createBuffer({
+                label: "Cell State A",
+                size: cellStateArray.byteLength,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+            }),
+            device.createBuffer({
+                label: "Cell State B",
+                size: cellStateArray.byteLength,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+            })
+        ];
+
+        // fill every third cell in first buffer, every second in 2nd buffer
         for (let i = 0; i < cellStateArray.length; i += 3) {
             cellStateArray[i] = 1;
         }
-        device.queue.writeBuffer(cellStateStorage, 0, cellStateArray);
+        device.queue.writeBuffer(cellStateStorage[0], 0, cellStateArray);
+
+        for (let i = 0; i < cellStateArray.length; i++) {
+            cellStateArray[i] = i % 2;
+        }
+        device.queue.writeBuffer(cellStateStorage[1], 0, cellStateArray);
 
         // defining WGSL shader
         const cellShaderModule = device.createShaderModule({
@@ -157,41 +174,57 @@
         });
 
         // Bindgroups are used to pass arbitrary data 
-        const bindGroup = device.createBindGroup({
-            label: "Cell Renderer Bind Group",
-            layout: cellPipeline.getBindGroupLayout(0),
-            entries: [{
-                binding: 0,
-                resource: { buffer: uniformBuffer }
-            },
-            {
-                binding: 1,
-                resource: { buffer: cellStateStorage }
-            }],
-        });
+        const bindGroups = [
+            device.createBindGroup({
+                label: "Cell Renderer Bind Group A",
+                layout: cellPipeline.getBindGroupLayout(0),
+                entries: [{
+                    binding: 0,
+                    resource: { buffer: uniformBuffer }
+                },
+                {
+                    binding: 1,
+                    resource: { buffer: cellStateStorage[0] }
+                }],
+            }),
+            device.createBindGroup({
+                label: "Cell Renderer Bind Group B",
+                layout: cellPipeline.getBindGroupLayout(0),
+                entries: [{
+                    binding: 0,
+                    resource: { buffer: uniformBuffer }
+                },
+                {
+                    binding: 1,
+                    resource: { buffer: cellStateStorage[1] }
+                }],
+            })
+        ];
 
-        const pass = encoder.beginRenderPass({
-            colorAttachments: [{
-                view: context.getCurrentTexture().createView(),
-                loadOp: "clear", // clear texture on start of render pass
-                clearValue: { r: 0, g: 0.25, b: 0.5, a: 1 },
-                storeOp: "store", // save results of renderpass onto texture 
-            }]
-        });
+        function updateGrid() {
+            step++;
 
-        pass.setPipeline(cellPipeline);         // specify render pipeline to use
-        pass.setVertexBuffer(0, vertexBuffer);
+            // tutorial creates a new encoder here every function call. Unsure why.
+            const encoder = device.createCommandEncoder();
 
-        pass.setBindGroup(0, bindGroup);        // bind uniform buffer
+            const pass = encoder.beginRenderPass({
+                colorAttachments: [{
+                    view: context.getCurrentTexture().createView(),
+                    loadOp: "clear", // clear texture on start of render pass
+                    clearValue: { r: 0, g: 0.25, b: 0.5, a: 1 },
+                    storeOp: "store", // save results of renderpass onto texture 
+                }]
+            });
 
-        pass.draw(vertices.length / 2, GRID_SIZE * GRID_SIZE);         // 6 vertices
+            pass.setPipeline(cellPipeline);         // specify render pipeline to use
+            pass.setVertexBuffer(0, vertexBuffer);
+            pass.setBindGroup(0, bindGroups[step % 2]);        // bind uniform buffer
+            pass.draw(vertices.length / 2, GRID_SIZE * GRID_SIZE);         // 6 vertices
+            pass.end(); // end of instructions for this render pass
+            device.queue.submit([encoder.finish()]); // submit instruction buffer without storing it instead
+        }
 
-        pass.end(); // end of instructions for this render pass
-
-        // const commandBuffer = encoder.finish(); // encodes the renderpass instructions into an object
-        // device.queue.submit([commandBuffer]); // submits instructions to the GPU's queue
-
-        device.queue.submit([encoder.finish()]); // submit instruction buffer without storing it instead
+        setInterval(updateGrid, UPDATE_INTERVAL);
 
     </script>
 </body>
