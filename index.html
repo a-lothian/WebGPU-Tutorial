@@ -86,6 +86,22 @@
                 `
         });
 
+        const cellPipeline = device.createRenderPipeline({
+            label: "Cell Pipeline",
+            layout: "auto",
+            vertex: {
+                module: cellShaderModule,     // variable holding the shader functions
+                entryPoint: "vertexMain",       // name of function
+                buffers: [vertexBufferLayout]   // gpu buffer passed as args
+            },
+            fragment: {
+                module: cellShaderModule,
+                entryPoint: "fragmentMain",
+                targets: [{
+                    format: canvasFormat
+                }]
+            }
+        });
 
         const pass = encoder.beginRenderPass({
             colorAttachments: [{
@@ -96,10 +112,14 @@
             }]
         });
 
+        pass.setPipeline(cellPipeline);         // specify render pipeline to use
+        pass.setVertexBuffer(0, vertexBuffer);
+        pass.draw(vertices.length / 2);         // 6 vertices
+
         pass.end(); // end of instructions for this render pass
 
-        // const commandBuffer = encoder.finish(); // encodes the renderpass instructions into an object
-        // device.queue.submit([commandBuffer]); // submits instructions to the GPU's queue
+        const commandBuffer = encoder.finish(); // encodes the renderpass instructions into an object
+        device.queue.submit([commandBuffer]); // submits instructions to the GPU's queue
 
         device.queue.submit([encoder.finish()]); // submit instruction buffer without storing it instead
 
