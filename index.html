@@ -37,6 +37,55 @@
         // interface for providing GPU instructions
         const encoder = device.createCommandEncoder();
 
+        // define geometery to render
+        const vertices = new Float32Array([
+            // X     Y
+            -0.8, -0.8,
+            0.8, -0.8,    // Triangle 1
+            0.8, 0.8,
+
+            -0.8, -0.8,
+            0.8, 0.8,    // Triangle 2
+            -0.8, 0.8,
+        ]);
+
+        // create GPU buffer to store vertices on the GPU side
+        const vertexBuffer = device.createBuffer({
+            label: "Cell vertices",     // custom label used for debugging
+            size: vertices.byteLength,  // Float32Array provides length attribute
+            usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+        });
+
+        // copy vertex data into GPU buffer
+        device.queue.writeBuffer(vertexBuffer, /*bufferOffset=*/ 0, vertices);
+
+        // define layout of the buffer
+        const vertexBufferLayout = {
+            arrayStride: 8, // each coord contains 2 floats of 32 bit (4 bytes) = 8 bytes per coordinate
+            attributes: [{
+                format: "float32x2", // 2D coordinates of 32 bit floats
+                offset: 0,  // 1st attribute, so data starts at 0. increases if > 1 attribute within buffer
+                shaderLocation: 0, // Position, see vertex shader
+            }],
+        };
+
+        // defining WGSL shader
+        const cellShaderModule = device.createShaderModule({
+            label: "Cell shader",
+            code: `
+                @vertex
+                fn vertexMain(@location(0) pos: vec2f) ->
+                    @builtin(position) vec4f {
+                    return vec4f(pos, 0, 1);
+                }
+
+                @fragment
+                fn fragmentMain() -> @location(0) vec4f {
+                    return vec4f(1, 0, 0, 1);
+                }
+                `
+        });
+
 
         const pass = encoder.beginRenderPass({
             colorAttachments: [{
