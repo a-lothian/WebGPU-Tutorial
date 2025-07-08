@@ -10,7 +10,7 @@
 <body>
     <canvas width="512" height="512"></canvas>
     <script type="module">
-        const GRID_SIZE = 4;
+        const GRID_SIZE = 32;
 
         const canvas = document.querySelector("canvas");
 
@@ -85,14 +85,21 @@
         // defining WGSL shader
         const cellShaderModule = device.createShaderModule({
             label: "Cell shader",
+            // note: shade code below is done in WGSL.
             code: `
                 @group(0) @binding(0) var<uniform> grid: vec2f;
 
 
                 @vertex
-                fn vertexMain(@location(0) pos: vec2f) ->
+                fn vertexMain(@location(0) pos: vec2f,
+                                    @builtin(instance_index) instance: u32) ->
                     @builtin(position) vec4f {
-                    return vec4f(pos / grid, 0, 1);
+
+                    let i = f32(instance);
+                    let cell = vec2f(i % grid.x, floor(i / grid.x));
+                    let cellOffset = cell / grid * 2;
+                    let gridPos = (pos + 1) / grid - 1 + cellOffset;
+                    return vec4f(gridPos, 0, 1);
                 }
 
                 @fragment
@@ -143,7 +150,7 @@
 
         pass.setBindGroup(0, bindGroup);        // bind uniform buffer
 
-        pass.draw(vertices.length / 2);         // 6 vertices
+        pass.draw(vertices.length / 2, GRID_SIZE * GRID_SIZE);         // 6 vertices
 
         pass.end(); // end of instructions for this render pass
 
