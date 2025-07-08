@@ -10,6 +10,8 @@
 <body>
     <canvas width="512" height="512"></canvas>
     <script type="module">
+        const GRID_SIZE = 4;
+
         const canvas = document.querySelector("canvas");
 
         // check WebGPU support
@@ -69,14 +71,28 @@
             }],
         };
 
+        // uniform buffers are constant across all computation each frame; they dont change based on position, etc.
+        // buffer is set using javascript before rendering, then is read-only during draw calls
+        const uniformArray = new Float32Array([GRID_SIZE, GRID_SIZE]); // store grid resolution in gpu uniform buffer
+        const uniformBuffer = device.createBuffer({
+            label: "Grid Uniforms",
+            size: uniformArray.byteLength,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+
+        device.queue.writeBuffer(uniformBuffer, 0, uniformArray); // write to buffer
+
         // defining WGSL shader
         const cellShaderModule = device.createShaderModule({
             label: "Cell shader",
             code: `
+                @group(0) @binding(0) var<uniform> grid: vec2f;
+
+
                 @vertex
                 fn vertexMain(@location(0) pos: vec2f) ->
                     @builtin(position) vec4f {
-                    return vec4f(pos, 0, 1);
+                    return vec4f(pos / grid, 0, 1);
                 }
 
                 @fragment
@@ -103,6 +119,16 @@
             }
         });
 
+        // Bindgroups are used to pass arbitrary data 
+        const bindGroup = device.createBindGroup({
+            label: "Cell Renderer Bind Group",
+            layout: cellPipeline.getBindGroupLayout(0),
+            entries: [{
+                binding: 0,
+                resource: { buffer: uniformBuffer }
+            }],
+        });
+
         const pass = encoder.beginRenderPass({
             colorAttachments: [{
                 view: context.getCurrentTexture().createView(),
@@ -114,12 +140,15 @@
 
         pass.setPipeline(cellPipeline);         // specify render pipeline to use
         pass.setVertexBuffer(0, vertexBuffer);
+
+        pass.setBindGroup(0, bindGroup);        // bind uniform buffer
+
         pass.draw(vertices.length / 2);         // 6 vertices
 
         pass.end(); // end of instructions for this render pass
 
-        const commandBuffer = encoder.finish(); // encodes the renderpass instructions into an object
-        device.queue.submit([commandBuffer]); // submits instructions to the GPU's queue
+        // const commandBuffer = encoder.finish(); // encodes the renderpass instructions into an object
+        // device.queue.submit([commandBuffer]); // submits instructions to the GPU's queue
 
         device.queue.submit([encoder.finish()]); // submit instruction buffer without storing it instead
 
