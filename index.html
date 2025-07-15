@@ -8,11 +8,11 @@
 </head>
 
 <body>
-    <canvas width="512" height="512"></canvas>
+    <canvas width="1024" height="1024"></canvas>
     <script type="module">
 
-        const GRID_SIZE = 32;
-        const UPDATE_INTERVAL = 500;
+        const GRID_SIZE = 512;
+        const UPDATE_INTERVAL = 1;
         const WORKGROUP_SIZE = 8;
         let step = 0; // count number of frames rendered
 
@@ -107,16 +107,11 @@
             })
         ];
 
-        // fill every third cell in first buffer, every second in 2nd buffer
-        for (let i = 0; i < cellStateArray.length; i += 3) {
-            cellStateArray[i] = 1;
+        // fill in random cells
+        for (let i = 0; i < cellStateArray.length; ++i) {
+            cellStateArray[i] = Math.random() > 0.6 ? 1 : 0;
         }
         device.queue.writeBuffer(cellStateStorage[0], 0, cellStateArray);
-
-        for (let i = 0; i < cellStateArray.length; i++) {
-            cellStateArray[i] = i % 2;
-        }
-        device.queue.writeBuffer(cellStateStorage[1], 0, cellStateArray);
 
         const simulationShaderModule = device.createShaderModule({
             label: "Life simulation shader",
@@ -125,19 +120,41 @@
                 @group(0) @binding(1) var<storage> cellStateIn: array<u32>;
                 @group(0) @binding(2) var<storage, read_write> cellStateOut: array<u32>;
                 
+                fn cellActive(x: u32, y: u32) -> u32 {
+                    return cellStateIn[cellIndex(vec2(x, y))];
+                }
+
                 fn cellIndex(cell: vec2u) -> u32 {
-                    return cell.y * u32(grid.x) + cell.x;
+                    return (cell.y % u32(grid.y)) * u32(grid.x) +
+                    (cell.x % u32(grid.x));
                 }
 
                 @compute
                 @workgroup_size(${WORKGROUP_SIZE}, ${WORKGROUP_SIZE})
                 fn computeMain(@builtin(global_invocation_id) cell: vec3u) {
-                    if (cellStateIn[cellIndex(cell.xy)] == 1) {
-                        cellStateOut[cellIndex(cell.xy)] = 0;
-                    } else {
-                        cellStateOut[cellIndex(cell.xy)] = 1;
+                    let activeNeighbors = cellActive(cell.x+1, cell.y+1) +
+                        cellActive(cell.x+1, cell.y) +
+                        cellActive(cell.x+1, cell.y-1) +
+                        cellActive(cell.x, cell.y-1) +
+                        cellActive(cell.x-1, cell.y-1) +
+                        cellActive(cell.x-1, cell.y) +
+                        cellActive(cell.x-1, cell.y+1) +
+                        cellActive(cell.x, cell.y+1);
+                    
+                let i = cellIndex(cell.xy);
+
+                switch activeNeighbors {
+                    case 2: {
+                    cellStateOut[i] = cellStateIn[i];
+                    }
+                    case 3: {
+                    cellStateOut[i] = 1;
+                    }
+                    default: {
+                    cellStateOut[i] = 0;
                     }
                 }
+            }
             `
         })
 
@@ -290,7 +307,7 @@
                 colorAttachments: [{
                     view: context.getCurrentTexture().createView(),
                     loadOp: "clear", // clear texture on start of render pass
-                    clearValue: { r: 0, g: 0.15, b: 0.35, a: 1 },
+                    clearValue: { r: 0, g: 0, b: 0, a: 1 },
                     storeOp: "store", // save results of renderpass onto texture 
                 }]
             });
