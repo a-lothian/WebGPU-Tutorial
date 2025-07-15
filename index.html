@@ -9,14 +9,22 @@
 
 <body>
     <canvas width="1024" height="1024"></canvas>
+    <p>FPS: <span id="fps-meter">-</span></p>
     <script type="module">
-
-        const GRID_SIZE = 512;
-        const UPDATE_INTERVAL = 1;
+        const GRID_SIZE = 128;
+        const UPDATE_INTERVAL = 0;
         const WORKGROUP_SIZE = 8;
         let step = 0; // count number of frames rendered
 
         const canvas = document.querySelector("canvas");
+        const fpsMeter = document.querySelector("#fps-meter");
+
+        let lastFrameTime = performance.now();
+
+        let isDragging = false;
+        
+        const cellsToAdd = new Set(); 
+        const singleCellValue = new Uint32Array([1]);
 
         // check WebGPU support
         if (!navigator.gpu) {
@@ -47,16 +55,16 @@
         // interface for providing GPU instructions
         // const encoder = device.createCommandEncoder();
 
-        // define geometery to render
+        // define geometry to render
         const vertices = new Float32Array([
             // X     Y
-            -0.8, -0.8,
-            0.8, -0.8,    // Triangle 1
-            0.8, 0.8,
+            -1, -1,
+            1, -1,    // Triangle 1
+            1, 1,
 
-            -0.8, -0.8,
-            0.8, 0.8,    // Triangle 2
-            -0.8, 0.8,
+            -1, -1,
+            1, 1,    // Triangle 2
+            -1, 1,
         ]);
 
         // create GPU buffer to store vertices on the GPU side
@@ -204,25 +212,25 @@
         const bindGroupLayout = device.createBindGroupLayout({
             label: "Cell Bind Group Layout",
             entries: [{
-                binding : 0,
+                binding: 0,
                 visibility: GPUShaderStage.VERTEX | GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
                 buffer: {} // uniform buffer (grid)
             }, {
-                binding : 1,
+                binding: 1,
                 visibility: GPUShaderStage.VERTEX | GPUShaderStage.COMPUTE,
-                buffer: {type: "read-only-storage"}
+                buffer: { type: "read-only-storage" }
             }, {
-                binding : 2,
+                binding: 2,
                 visibility: GPUShaderStage.COMPUTE,
-                buffer: {type: "storage"}
+                buffer: { type: "storage" }
             }
 
-        ]
+            ]
         });
 
         const pipelineLayout = device.createPipelineLayout({
             label: "Cell Pipeline Layout",
-            bindGroupLayouts: [ bindGroupLayout ],
+            bindGroupLayouts: [bindGroupLayout],
         });
 
         const cellPipeline = device.createRenderPipeline({
@@ -290,11 +298,35 @@
         ];
 
         function updateGrid() {
+
+            const inputBufferIndex = [step % 2];
+
+            // FPS counter logic
+            const currentTime = performance.now();
+            const deltaTime = currentTime - lastFrameTime;
+            lastFrameTime = currentTime;
+
+            if (deltaTime > 0) {
+                const fps = 1000 / deltaTime;
+                fpsMeter.textContent = fps.toFixed(2);
+            }
+
+            // Add any new cells from input
+
+           if (cellsToAdd.size > 0) {
+                for (const index of cellsToAdd) {
+                    // Offset is index * 4 because each u32 is 4 bytes.
+                    device.queue.writeBuffer(cellStateStorage[inputBufferIndex], index * 4, singleCellValue);
+                }
+                cellsToAdd.clear();
+            }
+
+            // Run compute shader
             const encoder = device.createCommandEncoder();
             const computePass = encoder.beginComputePass();
 
             computePass.setPipeline(simulationPipeline);
-            computePass.setBindGroup(0, bindGroups[step % 2]);
+            computePass.setBindGroup(0, bindGroups[inputBufferIndex]);
 
             const workgroupCount = Math.ceil(GRID_SIZE / WORKGROUP_SIZE);
             computePass.dispatchWorkgroups(workgroupCount, workgroupCount);
@@ -314,7 +346,7 @@
 
             pass.setPipeline(cellPipeline);         // specify render pipeline to use
             pass.setVertexBuffer(0, vertexBuffer);
-            pass.setBindGroup(0, bindGroups[step % 2]);        // bind uniform buffer
+            pass.setBindGroup(0, bindGroups[inputBufferIndex]);        // bind uniform buffer
             pass.draw(vertices.length / 2, GRID_SIZE * GRID_SIZE);         // 6 vertices
             pass.end(); // end of instructions for this render pass
             device.queue.submit([encoder.finish()]); // submit instruction buffer without storing it instead
@@ -322,6 +354,58 @@
 
         setInterval(updateGrid, UPDATE_INTERVAL);
 
+
+        //report the mouse position on click
+        canvas.addEventListener("mousedown", (e) => {
+            isDragging = true;
+            handleMouseInteraction(e);
+        });
+
+        canvas.addEventListener("mousemove", (e) => {
+            if (isDragging) {
+                handleMouseInteraction(e);
+            }
+        });
+
+        canvas.addEventListener("mouseup", () => {
+            isDragging = false;
+        });
+
+        canvas.addEventListener("mouseleave", () => {
+            isDragging = false;
+        });
+
+        function handleMouseInteraction(event) {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = event.clientX - rect.left;
+            const mouseY = event.clientY - rect.top;
+            
+            const cellX = Math.floor(mouseX / canvas.width * GRID_SIZE);
+            const cellY = Math.floor(mouseY / canvas.height * GRID_SIZE);
+
+            const indexes = [coordsToIndex(cellX, cellY), 
+                        coordsToIndex(cellX+1, cellY),
+                        coordsToIndex(cellX, cellY+1),
+                        coordsToIndex(cellX-1, cellY),
+                        coordsToIndex(cellX, cellY-1)];
+
+                indexes.forEach(index => {
+                    if (indexes != null) {
+                    cellsToAdd.add(index);
+                }
+                });
+                
+        }
+
+        function coordsToIndex(x, y) {
+            const cellX = Math.floor(x / canvas.width * GRID_SIZE);
+            const cellY = Math.floor(y / canvas.height * GRID_SIZE);
+
+            if (cellX >= 0 && cellX < GRID_SIZE && cellY >= 0 && cellY < GRID_SIZE) {
+                return (GRID_SIZE - y - 1) * GRID_SIZE + x;
+            }
+            return null;
+        }
     </script>
 </body>
 
