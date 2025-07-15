@@ -169,7 +169,7 @@
         // defining WGSL shader
         const cellShaderModule = device.createShaderModule({
             label: "Cell shader",
-            // note: shade code below is done in WGSL.
+            // note: shader code below is done in WGSL.
             code: `
 
                 struct VertexInput {
@@ -299,7 +299,7 @@
 
         function updateGrid() {
 
-            const inputBufferIndex = [step % 2];
+            const inputBufferIndex = step % 2;
 
             // FPS counter logic
             const currentTime = performance.now();
@@ -390,7 +390,7 @@
                         coordsToIndex(cellX, cellY-1)];
 
                 indexes.forEach(index => {
-                    if (indexes != null) {
+                    if (index != null) {
                     cellsToAdd.add(index);
                 }
                 });
@@ -401,7 +401,7 @@
             const cellX = Math.floor(x / canvas.width * GRID_SIZE);
             const cellY = Math.floor(y / canvas.height * GRID_SIZE);
 
-            if (cellX >= 0 && cellX < GRID_SIZE && cellY >= 0 && cellY < GRID_SIZE) {
+            if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
                 return (GRID_SIZE - y - 1) * GRID_SIZE + x;
             }
             return null;
