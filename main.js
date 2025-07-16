@@ -1,12 +1,20 @@
-let GRID_SIZE = 64;
+let PIXELS_PER_CELL = 4;
+let GRID_SIZE_X = 64;
+let GRID_SIZE_Y = 64;
 // const UPDATE_INTERVAL = 0;
 const WORKGROUP_SIZE = 8;
 let step = 0; // count number of frames rendered
 
 const canvas = document.querySelector("canvas");
 
-const resMeter = document.querySelector("#res-meter");
-const resInput = document.querySelector("#res-input");
+const resInputX = document.querySelector("#res-input-x");
+const resMeterX = document.querySelector("#res-meter-x");
+
+const resInputY = document.querySelector("#res-input-y");
+const resMeterY = document.querySelector("#res-meter-y");
+
+const cellScale = document.querySelector("#cell-size");
+const cellScaleMeter = document.querySelector("#cell-size-meter");
 
 const fpsMeter = document.querySelector("#fps-meter");
 
@@ -80,7 +88,7 @@ const vertexBufferLayout = {
 
 // uniform buffers are constant across all computation each frame; they dont change based on position, etc.
 // buffer is set using javascript before rendering, then is read-only during draw calls
-const uniformArray = new Float32Array([GRID_SIZE, GRID_SIZE]); // store grid resolution in gpu uniform buffer
+const uniformArray = new Float32Array([GRID_SIZE_X, GRID_SIZE_Y]); // store grid resolution in gpu uniform buffer
 const uniformBuffer = device.createBuffer({
     label: "Grid Uniforms",
     size: uniformArray.byteLength,
@@ -90,7 +98,7 @@ const uniformBuffer = device.createBuffer({
 device.queue.writeBuffer(uniformBuffer, 0, uniformArray); // write to buffer
 
 // Create buffer to track cell state using a STORAGE type
-const cellStateArray = new Uint32Array(GRID_SIZE * GRID_SIZE);
+const cellStateArray = new Uint32Array(GRID_SIZE_X * GRID_SIZE_Y);
 
 // create current and working copies of simulation
 const cellStateStorage = [
@@ -307,8 +315,9 @@ function updateGrid(inputBufferIndex) {
     computePass.setPipeline(simulationPipeline);
     computePass.setBindGroup(0, bindGroups[inputBufferIndex]);
 
-    const workgroupCount = Math.ceil(GRID_SIZE / WORKGROUP_SIZE);
-    computePass.dispatchWorkgroups(workgroupCount, workgroupCount);
+    const workgroupCountX = Math.ceil(GRID_SIZE_X / WORKGROUP_SIZE);
+    const workgroupCountY = Math.ceil(GRID_SIZE_Y / WORKGROUP_SIZE);
+    computePass.dispatchWorkgroups(workgroupCountX, workgroupCountY);
 
     computePass.end();
 
@@ -324,7 +333,7 @@ function updateGrid(inputBufferIndex) {
     pass.setPipeline(cellPipeline);         // specify render pipeline to use
     pass.setVertexBuffer(0, vertexBuffer);
     pass.setBindGroup(0, bindGroups[inputBufferIndex]);        // bind uniform buffer
-    pass.draw(vertices.length / 2, GRID_SIZE * GRID_SIZE);         // 6 vertices
+    pass.draw(vertices.length / 2, GRID_SIZE_X * GRID_SIZE_Y);         // 6 vertices
     pass.end(); // end of instructions for this render pass
     device.queue.submit([encoder.finish()]); // submit instruction buffer without storing it instead
 }
@@ -349,8 +358,24 @@ function renderLoop(){
 
 requestAnimationFrame(renderLoop);
 
-resInput.addEventListener("input", (e) =>{
-    resizeGrid(Number(resInput.value));
+function changeSimulationSize() {
+    resizeGrid(Number(resInputX.value), Number(resInputY.value));
+    canvas.width = GRID_SIZE_X * PIXELS_PER_CELL;
+    canvas.height = GRID_SIZE_Y * PIXELS_PER_CELL;
+}
+
+resInputX.addEventListener("input", (e) =>{
+    changeSimulationSize();
+})
+
+resInputY.addEventListener("input", (e) =>{
+    changeSimulationSize();
+})
+
+cellScale.addEventListener("input", (e) => {
+    PIXELS_PER_CELL = 2**cellScale.value;
+    cellScaleMeter.textContent = PIXELS_PER_CELL;
+    changeSimulationSize();
 })
 
 //report the mouse position on click
@@ -378,8 +403,8 @@ function handleMouseInteraction(event) {
     const mouseX = event.clientX - rect.left;
     const mouseY = event.clientY - rect.top;
     
-    const cellX = Math.floor(mouseX / canvas.width * GRID_SIZE);
-    const cellY = Math.floor(mouseY / canvas.height * GRID_SIZE);
+    const cellX = Math.floor(mouseX / canvas.width * GRID_SIZE_X);
+    const cellY = Math.floor(mouseY / canvas.height * GRID_SIZE_Y);
 
     const indexes = [coordsToIndex(cellX, cellY), 
                 coordsToIndex(cellX+1, cellY),
@@ -396,25 +421,28 @@ function handleMouseInteraction(event) {
 }
 
 function coordsToIndex(x, y) {
-    const cellX = Math.floor(x / canvas.width * GRID_SIZE);
-    const cellY = Math.floor(y / canvas.height * GRID_SIZE);
+    const cellX = Math.floor(x / canvas.width * GRID_SIZE_X);
+    const cellY = Math.floor(y / canvas.height * GRID_SIZE_Y);
 
-    if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
-        return (GRID_SIZE - y - 1) * GRID_SIZE + x;
+    if (x >= 0 && x < GRID_SIZE_X && y >= 0 && y < GRID_SIZE_Y) {
+        return (GRID_SIZE_Y - y - 1) * GRID_SIZE_X + x;
     }
     return null;
 }
 
-function resizeGrid(newSize) {
-    GRID_SIZE = newSize;
-    resMeter.textContent = newSize;
+function resizeGrid(newSizeX, newSizeY) {
+    GRID_SIZE_X = newSizeX;
+    GRID_SIZE_Y = newSizeY;
+
+    resMeterX.textContent = newSizeX;
+    resMeterY.textContent = newSizeY;
 
     // update gridsize buffer
-    device.queue.writeBuffer(uniformBuffer, 0, new Float32Array([newSize, newSize]));
+    device.queue.writeBuffer(uniformBuffer, 0, new Float32Array([newSizeX, newSizeY]));
 
 
     // create new buffers with correct sizes
-    const cellStateArray = new Uint32Array(GRID_SIZE * GRID_SIZE);
+    const cellStateArray = new Uint32Array(GRID_SIZE_X * GRID_SIZE_Y);
 
     const newCellStateStorage = [
         device.createBuffer({
