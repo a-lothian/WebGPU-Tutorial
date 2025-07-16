@@ -1,5 +1,5 @@
 let GRID_SIZE = 64;
-const UPDATE_INTERVAL = 0;
+// const UPDATE_INTERVAL = 0;
 const WORKGROUP_SIZE = 8;
 let step = 0; // count number of frames rendered
 
@@ -288,19 +288,7 @@ const bindGroups = [
     })
 ];
 
-function updateGrid() {
-
-    const inputBufferIndex = step % 2;
-
-    // FPS counter logic
-    const currentTime = performance.now();
-    const deltaTime = currentTime - lastFrameTime;
-    lastFrameTime = currentTime;
-
-    if (deltaTime > 0) {
-        const fps = 1000 / deltaTime;
-        fpsMeter.textContent = fps.toFixed(2);
-    }
+function updateGrid(inputBufferIndex) {
 
     // Add any new cells from input
 
@@ -324,8 +312,6 @@ function updateGrid() {
 
     computePass.end();
 
-    step++;
-
     const pass = encoder.beginRenderPass({
         colorAttachments: [{
             view: context.getCurrentTexture().createView(),
@@ -343,7 +329,25 @@ function updateGrid() {
     device.queue.submit([encoder.finish()]); // submit instruction buffer without storing it instead
 }
 
-setInterval(updateGrid, UPDATE_INTERVAL);
+function renderLoop(){
+
+    if (step % 5 == 0) { // calculate fps over 5 frames
+        const currentTime = performance.now();
+        const deltaTime = currentTime - lastFrameTime; // time for 5 frames
+        lastFrameTime = currentTime;
+
+        if (deltaTime > 0) {
+            const fps = 5000 / deltaTime;
+            fpsMeter.textContent = fps.toFixed(2);
+        }
+    }
+
+    updateGrid(step % 2);
+    step++;
+    requestAnimationFrame(renderLoop);
+}
+
+requestAnimationFrame(renderLoop);
 
 resInput.addEventListener("input", (e) =>{
     resizeGrid(Number(resInput.value));
