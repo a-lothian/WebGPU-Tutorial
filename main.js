@@ -1,9 +1,9 @@
 let PIXELS_PER_CELL = 4;
 let GRID_SIZE_X = 64;
 let GRID_SIZE_Y = 64;
-// const UPDATE_INTERVAL = 0;
+let TARGET_SIM_RATE = 1;
 const WORKGROUP_SIZE = 8;
-let step = 0; // count number of frames rendered
+let step = 0; // count number of frames simulated
 
 const canvas = document.querySelector("canvas");
 
@@ -15,6 +15,9 @@ const resMeterY = document.querySelector("#res-meter-y");
 
 const cellScale = document.querySelector("#cell-size");
 const cellScaleMeter = document.querySelector("#cell-size-meter");
+
+const simSpeed = document.querySelector("#sim-speed");
+const simSpeedMeter = document.querySelector("#sim-speed-meter");
 
 const fpsMeter = document.querySelector("#fps-meter");
 
@@ -297,7 +300,6 @@ const bindGroups = [
 ];
 
 function updateGrid(inputBufferIndex) {
-
     // Add any new cells from input
 
     if (cellsToAdd.size > 0) {
@@ -339,20 +341,20 @@ function updateGrid(inputBufferIndex) {
 }
 
 function renderLoop(){
+    const currentTime = performance.now();
+    const deltaTime = currentTime - lastFrameTime;
+    lastFrameTime = currentTime;
 
-    if (step % 5 == 0) { // calculate fps over 5 frames
-        const currentTime = performance.now();
-        const deltaTime = currentTime - lastFrameTime; // time for 5 frames
-        lastFrameTime = currentTime;
-
-        if (deltaTime > 0) {
-            const fps = 5000 / deltaTime;
-            fpsMeter.textContent = fps.toFixed(2);
-        }
+    if (deltaTime > 0) {
+        const fps =  TARGET_SIM_RATE * 1000 / deltaTime;
+        fpsMeter.textContent = fps.toFixed(2);
     }
 
-    updateGrid(step % 2);
-    step++;
+    for (let i = 0; i < TARGET_SIM_RATE; i++){
+        updateGrid(step % 2);
+        step++;
+    }
+
     requestAnimationFrame(renderLoop);
 }
 
@@ -376,6 +378,11 @@ cellScale.addEventListener("input", (e) => {
     PIXELS_PER_CELL = 2**cellScale.value;
     cellScaleMeter.textContent = PIXELS_PER_CELL;
     changeSimulationSize();
+})
+
+simSpeed.addEventListener("input", (e) => {
+    TARGET_SIM_RATE = 2**simSpeed.value;
+    simSpeedMeter.textContent = TARGET_SIM_RATE;
 })
 
 //report the mouse position on click
@@ -439,7 +446,6 @@ function resizeGrid(newSizeX, newSizeY) {
 
     // update gridsize buffer
     device.queue.writeBuffer(uniformBuffer, 0, new Float32Array([newSizeX, newSizeY]));
-
 
     // create new buffers with correct sizes
     const cellStateArray = new Uint32Array(GRID_SIZE_X * GRID_SIZE_Y);
