@@ -25,7 +25,7 @@ let lastFrameTime = performance.now();
 
 let isDragging = false;
 
-const cellsToAdd = new Set(); 
+const cellsToAdd = new Set();
 const singleCellValue = new Uint32Array([1]);
 
 // check WebGPU support
@@ -340,17 +340,17 @@ function updateGrid(inputBufferIndex) {
     device.queue.submit([encoder.finish()]); // submit instruction buffer without storing it instead
 }
 
-function renderLoop(){
+function renderLoop() {
     const currentTime = performance.now();
     const deltaTime = currentTime - lastFrameTime;
     lastFrameTime = currentTime;
 
     if (deltaTime > 0) {
-        const fps =  TARGET_SIM_RATE * 1000 / deltaTime;
+        const fps = 1000 / deltaTime;
         fpsMeter.textContent = fps.toFixed(2);
     }
 
-    for (let i = 0; i < TARGET_SIM_RATE; i++){
+    for (let i = 0; i < TARGET_SIM_RATE; i++) {
         updateGrid(step % 2);
         step++;
     }
@@ -366,22 +366,22 @@ function changeSimulationSize() {
     canvas.height = GRID_SIZE_Y * PIXELS_PER_CELL;
 }
 
-resInputX.addEventListener("input", (e) =>{
+resInputX.addEventListener("input", (e) => {
     changeSimulationSize();
 })
 
-resInputY.addEventListener("input", (e) =>{
+resInputY.addEventListener("input", (e) => {
     changeSimulationSize();
 })
 
 cellScale.addEventListener("input", (e) => {
-    PIXELS_PER_CELL = 2**cellScale.value;
+    PIXELS_PER_CELL = 2 ** cellScale.value;
     cellScaleMeter.textContent = PIXELS_PER_CELL;
     changeSimulationSize();
 })
 
 simSpeed.addEventListener("input", (e) => {
-    TARGET_SIM_RATE = 2**simSpeed.value;
+    TARGET_SIM_RATE = 2 ** simSpeed.value;
     simSpeedMeter.textContent = TARGET_SIM_RATE;
 })
 
@@ -409,22 +409,22 @@ function handleMouseInteraction(event) {
     const rect = canvas.getBoundingClientRect();
     const mouseX = event.clientX - rect.left;
     const mouseY = event.clientY - rect.top;
-    
+
     const cellX = Math.floor(mouseX / canvas.width * GRID_SIZE_X);
     const cellY = Math.floor(mouseY / canvas.height * GRID_SIZE_Y);
 
-    const indexes = [coordsToIndex(cellX, cellY), 
-                coordsToIndex(cellX+1, cellY),
-                coordsToIndex(cellX, cellY+1),
-                coordsToIndex(cellX-1, cellY),
-                coordsToIndex(cellX, cellY-1)];
+    const indexes = [coordsToIndex(cellX, cellY),
+    coordsToIndex(cellX + 1, cellY),
+    coordsToIndex(cellX, cellY + 1),
+    coordsToIndex(cellX - 1, cellY),
+    coordsToIndex(cellX, cellY - 1)];
 
-        indexes.forEach(index => {
-            if (index != null) {
+    indexes.forEach(index => {
+        if (index != null) {
             cellsToAdd.add(index);
         }
-        });
-        
+    });
+
 }
 
 function coordsToIndex(x, y) {
