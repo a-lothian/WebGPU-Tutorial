@@ -322,7 +322,11 @@ function updateGrid(inputBufferIndex) {
     computePass.dispatchWorkgroups(workgroupCountX, workgroupCountY);
 
     computePass.end();
+    device.queue.submit([encoder.finish()]);
+}
 
+function renderGrid(inputBufferIndex) {
+    const encoder = device.createCommandEncoder();
     const pass = encoder.beginRenderPass({
         colorAttachments: [{
             view: context.getCurrentTexture().createView(),
@@ -332,12 +336,12 @@ function updateGrid(inputBufferIndex) {
         }]
     });
 
-    pass.setPipeline(cellPipeline);         // specify render pipeline to use
+    pass.setPipeline(cellPipeline); // specify render pipeline to use
     pass.setVertexBuffer(0, vertexBuffer);
-    pass.setBindGroup(0, bindGroups[inputBufferIndex]);        // bind uniform buffer
-    pass.draw(vertices.length / 2, GRID_SIZE_X * GRID_SIZE_Y);         // 6 vertices
+    pass.setBindGroup(0, bindGroups[inputBufferIndex]); // bind uniform buffer
+    pass.draw(vertices.length / 2, GRID_SIZE_X * GRID_SIZE_Y); // 6 vertices
     pass.end(); // end of instructions for this render pass
-    device.queue.submit([encoder.finish()]); // submit instruction buffer without storing it instead
+    device.queue.submit([encoder.finish()]);  // submit instruction buffer without storing it instead
 }
 
 function renderLoop() {
@@ -354,6 +358,8 @@ function renderLoop() {
         updateGrid(step % 2);
         step++;
     }
+
+    renderGrid(step % 2);
 
     requestAnimationFrame(renderLoop);
 }
