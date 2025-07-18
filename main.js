@@ -4,6 +4,7 @@ let GRID_SIZE_Y = 64;
 let TARGET_SIM_RATE = 1;
 const WORKGROUP_SIZE = 8;
 let step = 0; // count number of frames simulated
+let simAcc = 0; // accumulator to allow fractional simulation speeds
 
 const canvas = document.querySelector("canvas");
 
@@ -354,9 +355,12 @@ function renderLoop() {
         fpsMeter.textContent = fps.toFixed(2);
     }
 
-    for (let i = 0; i < TARGET_SIM_RATE; i++) {
+    simAcc += TARGET_SIM_RATE;
+
+    while (simAcc >= 1) {
         updateGrid(step % 2);
         step++;
+        simAcc -= 1;
     }
 
     renderGrid(step % 2);
