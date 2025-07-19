@@ -2,6 +2,7 @@ let PIXELS_PER_CELL = 4;
 let GRID_SIZE_X = 64;
 let GRID_SIZE_Y = 64;
 let TARGET_SIM_RATE = 1;
+let RADIUS = 8; // brush radius
 const WORKGROUP_SIZE = 8;
 let step = 0; // count number of frames simulated
 let simAcc = 0; // accumulator to allow fractional simulation speeds
@@ -101,6 +102,14 @@ const uniformBuffer = device.createBuffer({
 
 device.queue.writeBuffer(uniformBuffer, 0, uniformArray); // write to buffer
 
+const clickPosArray = new Float32Array([0, GRID_SIZE_X, GRID_SIZE_Y, RADIUS]); // store clickStatus, x, y, radius info for spawning new cells with mouse
+const clickPosBuffer = device.createBuffer({
+    label: "Mouse Info",
+    size: uniformArray.byteLength,
+    usage: GPUBufferUsage.COMPUTE | GPUBufferUsage.COPY_DST,
+})
+device.queue.writeBuffer(clickPosBuffer, 0, clickPosArray);
+
 // Create buffer to track cell state using a STORAGE type
 const cellStateArray = new Uint32Array(GRID_SIZE_X * GRID_SIZE_Y);
 
@@ -130,6 +139,7 @@ const simulationShaderModule = device.createShaderModule({
         @group(0) @binding(0) var<uniform> grid: vec2f;
         @group(0) @binding(1) var<storage> cellStateIn: array<u32>;
         @group(0) @binding(2) var<storage, read_write> cellStateOut: array<u32>;
+        @group(0) @binding(3) var<storage> mouseInfo: array<u32>;
         
         fn cellActive(x: u32, y: u32) -> u32 {
             return cellStateIn[cellIndex(vec2(x, y))];
@@ -140,32 +150,43 @@ const simulationShaderModule = device.createShaderModule({
             (cell.x % u32(grid.x));
         }
 
+        fn calculateCell(cell: vec)
+
         @compute
         @workgroup_size(${WORKGROUP_SIZE}, ${WORKGROUP_SIZE})
         fn computeMain(@builtin(global_invocation_id) cell: vec3u) {
-            let activeNeighbors = cellActive(cell.x+1, cell.y+1) +
-                cellActive(cell.x+1, cell.y) +
-                cellActive(cell.x+1, cell.y-1) +
-                cellActive(cell.x, cell.y-1) +
-                cellActive(cell.x-1, cell.y-1) +
-                cellActive(cell.x-1, cell.y) +
-                cellActive(cell.x-1, cell.y+1) +
-                cellActive(cell.x, cell.y+1);
-            
-        let i = cellIndex(cell.xy);
 
-        switch activeNeighbors {
-            case 2: {
-            cellStateOut[i] = cellStateIn[i];
-            }
-            case 3: {
-            cellStateOut[i] = 1;
-            }
-            default: {
-            cellStateOut[i] = 0;
+            switch(mouseInfo[0]) {
+                case 0: {
+                    let activeNeighbors = cellActive(cell.x+1, cell.y+1) +
+                        cellActive(cell.x+1, cell.y) +
+                        cellActive(cell.x+1, cell.y-1) +
+                        cellActive(cell.x, cell.y-1) +
+                        cellActive(cell.x-1, cell.y-1) +
+                        cellActive(cell.x-1, cell.y) +
+                        cellActive(cell.x-1, cell.y+1) +
+                        cellActive(cell.x, cell.y+1);
+                        
+                    let i = cellIndex(cell.xy);
+
+                    switch activeNeighbors {
+                        case 2: {
+                        cellStateOut[i] = cellStateIn[i];
+                        }
+                        case 3: {
+                        cellStateOut[i] = 1;
+                        }
+                        default: {
+                        cellStateOut[i] = 0;
+                        }
+                    }
+                }
+                
+                case 1: { // 
+
+                }
             }
         }
-    }
     `
 })
 
@@ -278,6 +299,10 @@ const bindGroups = [
         {
             binding: 2,
             resource: { buffer: cellStateStorage[1] }
+        },
+        {
+            binding: 3,
+            resource: { buffer: clickPosBuffer }
         }
         ],
     }),
@@ -295,6 +320,10 @@ const bindGroups = [
         {
             binding: 2,
             resource: { buffer: cellStateStorage[0] }
+        },
+        {
+            binding: 3,
+            resource: { buffer: clickPosBuffer }
         }
         ],
     })
@@ -475,7 +504,7 @@ function resizeGrid(newSizeX, newSizeY) {
 
     // fill in random cells
     for (let i = 0; i < cellStateArray.length; ++i) {
-        cellStateArray[i] = Math.random() > 0.6 ? 1 : 0;
+        cellStateArray[i] = Math.random() > 0.5 ? 1 : 0;
     }
     device.queue.writeBuffer(newCellStateStorage[0], 0, cellStateArray);
 
