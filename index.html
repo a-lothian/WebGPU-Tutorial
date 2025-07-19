@@ -5,26 +5,30 @@
 <head>
     <meta charset="utf-8">
     <title>WebGPU Life</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
     <canvas width="256" height="256"></canvas>
 
-    <p>Grid Size X: <span id="res-meter-x">64</span></p>
-    <input id="res-input-x" type="range" min="16" max="1024" step="1" value="64">
-    <p>Grid Size Y: <span id="res-meter-y">64</span></p>
-    <input id="res-input-y" type="range" min="16" max="1024" step="1" value="64">
+    <div id="controls">
+        <p>Grid Size X: <span id="res-meter-x">64</span></p>
+        <input id="res-input-x" type="range" min="16" max="1024" step="1" value="64">
+        <p>Grid Size Y: <span id="res-meter-y">64</span></p>
+        <input id="res-input-y" type="range" min="16" max="1024" step="1" value="64">
 
-    <p>Cell Scale: <span id="cell-size-meter">4</span></p>
-    <input id="cell-size" type="range" min="0" max="3" value="2">
+        <p>Cell Scale: <span id="cell-size-meter">4</span></p>
+        <input id="cell-size" type="range" min="0" max="3" value="2">
 
 
-    <p>Simulation Speed: <span id="sim-speed-meter">1</span></p>
-    <input id="sim-speed" type="range" min="-5" max="10" value="0">
-    <br>
-    <b>Note: Values above 1 will not render every step</b>
+        <p>Simulation Speed: <span id="sim-speed-meter">1</span></p>
+        <input id="sim-speed" type="range" min="-5" max="10" value="0">
+        <br>
+        <b>Note: Values above 1 will not render every step</b>
 
-    <p>FPS: <span id="fps-meter">-</span></p>
+        <p>FPS: <span id="fps-meter">-</span></p>
+    </div>
+    
     <script src="main.js" type="module"></script>
 </body>
 

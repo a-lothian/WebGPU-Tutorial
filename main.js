@@ -2,7 +2,7 @@ let PIXELS_PER_CELL = 4;
 let GRID_SIZE_X = 64;
 let GRID_SIZE_Y = 64;
 let TARGET_SIM_RATE = 1;
-let RADIUS = 8; // brush radius
+let RADIUS_SQRED = 8; // brush radius squared
 const WORKGROUP_SIZE = 8;
 let step = 0; // count number of frames simulated
 let simAcc = 0; // accumulator to allow fractional simulation speeds
@@ -102,11 +102,11 @@ const uniformBuffer = device.createBuffer({
 
 device.queue.writeBuffer(uniformBuffer, 0, uniformArray); // write to buffer
 
-const clickPosArray = new Float32Array([0, GRID_SIZE_X, GRID_SIZE_Y, RADIUS]); // store clickStatus, x, y, radius info for spawning new cells with mouse
+const clickPosArray = new Uint32Array([0, GRID_SIZE_X, GRID_SIZE_Y, RADIUS_SQRED]); // store clickStatus, x, y, radius**2 info for spawning new cells with mouse
 const clickPosBuffer = device.createBuffer({
     label: "Mouse Info",
-    size: uniformArray.byteLength,
-    usage: GPUBufferUsage.COMPUTE | GPUBufferUsage.COPY_DST,
+    size: clickPosArray.byteLength,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 })
 device.queue.writeBuffer(clickPosBuffer, 0, clickPosArray);
 
@@ -135,11 +135,19 @@ device.queue.writeBuffer(cellStateStorage[0], 0, cellStateArray);
 
 const simulationShaderModule = device.createShaderModule({
     label: "Life simulation shader",
-    code: `
+    code: /* wgsl */`
+
+        struct MouseInfo {
+            click: u32,
+            x: u32,
+            y: u32,
+            radiusSquared: u32,
+        };
+
         @group(0) @binding(0) var<uniform> grid: vec2f;
         @group(0) @binding(1) var<storage> cellStateIn: array<u32>;
         @group(0) @binding(2) var<storage, read_write> cellStateOut: array<u32>;
-        @group(0) @binding(3) var<storage> mouseInfo: array<u32>;
+        @group(0) @binding(3) var<uniform> mouseInfo: MouseInfo;
         
         fn cellActive(x: u32, y: u32) -> u32 {
             return cellStateIn[cellIndex(vec2(x, y))];
@@ -150,40 +158,59 @@ const simulationShaderModule = device.createShaderModule({
             (cell.x % u32(grid.x));
         }
 
-        fn calculateCell(cell: vec)
+        fn distanceSquared(a: vec2u, b: vec2u) -> u32 {
+            let dx = i32(a.x) - i32(b.x);
+            let dy = i32(a.y) - i32(b.y);
+            return u32(dx*dx + dy*dy);
+        }
+
+        fn calculateCell(cell: vec2u) -> u32 {
+            let activeNeighbors = cellActive(cell.x+1, cell.y+1) +
+                cellActive(cell.x+1, cell.y) +
+                cellActive(cell.x+1, cell.y-1) +
+                cellActive(cell.x, cell.y-1) +
+                cellActive(cell.x-1, cell.y-1) +
+                cellActive(cell.x-1, cell.y) +
+                cellActive(cell.x-1, cell.y+1) +
+                cellActive(cell.x, cell.y+1);
+                
+            let i = cellIndex(cell.xy);
+
+            switch activeNeighbors {
+                case 2: {
+                return cellStateIn[i];
+                }
+                case 3: {
+                return 1;
+                }
+                default: {
+                return 0;
+                }
+            }
+        }
 
         @compute
         @workgroup_size(${WORKGROUP_SIZE}, ${WORKGROUP_SIZE})
         fn computeMain(@builtin(global_invocation_id) cell: vec3u) {
+            
+            let i = cellIndex(cell.xy);
 
-            switch(mouseInfo[0]) {
-                case 0: {
-                    let activeNeighbors = cellActive(cell.x+1, cell.y+1) +
-                        cellActive(cell.x+1, cell.y) +
-                        cellActive(cell.x+1, cell.y-1) +
-                        cellActive(cell.x, cell.y-1) +
-                        cellActive(cell.x-1, cell.y-1) +
-                        cellActive(cell.x-1, cell.y) +
-                        cellActive(cell.x-1, cell.y+1) +
-                        cellActive(cell.x, cell.y+1);
-                        
-                    let i = cellIndex(cell.xy);
-
-                    switch activeNeighbors {
-                        case 2: {
-                        cellStateOut[i] = cellStateIn[i];
-                        }
-                        case 3: {
-                        cellStateOut[i] = 1;
-                        }
-                        default: {
-                        cellStateOut[i] = 0;
-                        }
-                    }
+            switch(mouseInfo.click) { // mouse is not clicked
+                case 0, default: {
+                    cellStateOut[i] = calculateCell(cell.xy);
                 }
                 
-                case 1: { // 
+                case 1: { // mouse clicked
+                    let cellPos = vec2u(cell.xy);
+                    let mousePos = vec2u(mouseInfo.x, mouseInfo.y);
+                    let dist = distanceSquared(cellPos, mousePos);
+                    let radius = mouseInfo.radiusSquared;
 
+                    if (dist <= radius) {
+                        cellStateOut[i] = 1; // cell is within brush
+                    } else {
+                        cellStateOut[i] = calculateCell(cell.xy);
+                    }
                 }
             }
         }
@@ -193,8 +220,7 @@ const simulationShaderModule = device.createShaderModule({
 // defining WGSL shader
 const cellShaderModule = device.createShaderModule({
     label: "Cell shader",
-    // note: shader code below is done in WGSL.
-    code: `
+    code: /* wgsl */`
 
         struct VertexInput {
             @location(0) pos: vec2f,
@@ -238,7 +264,7 @@ const bindGroupLayout = device.createBindGroupLayout({
     entries: [{
         binding: 0,
         visibility: GPUShaderStage.VERTEX | GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
-        buffer: {} // uniform buffer (grid)
+        buffer: {} // uniform buffer (grid size)
     }, {
         binding: 1,
         visibility: GPUShaderStage.VERTEX | GPUShaderStage.COMPUTE,
@@ -247,9 +273,11 @@ const bindGroupLayout = device.createBindGroupLayout({
         binding: 2,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "storage" }
-    }
-
-    ]
+    }, {
+        binding: 3,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: {type: "uniform"}
+    }]
 });
 
 const pipelineLayout = device.createPipelineLayout({
@@ -330,15 +358,6 @@ const bindGroups = [
 ];
 
 function updateGrid(inputBufferIndex) {
-    // Add any new cells from input
-
-    if (cellsToAdd.size > 0) {
-        for (const index of cellsToAdd) {
-            // Offset is index * 4 because each u32 is 4 bytes.
-            device.queue.writeBuffer(cellStateStorage[inputBufferIndex], index * 4, singleCellValue);
-        }
-        cellsToAdd.clear();
-    }
 
     // Run compute shader
     const encoder = device.createCommandEncoder();
@@ -444,26 +463,26 @@ canvas.addEventListener("mouseleave", () => {
     isDragging = false;
 });
 
+canvas.addEventListener("mouseup", () => {
+    clickPosArray[0] = 0;
+    device.queue.writeBuffer(clickPosBuffer, 0, clickPosArray);
+    isDragging = false;
+});
+
 function handleMouseInteraction(event) {
     const rect = canvas.getBoundingClientRect();
     const mouseX = event.clientX - rect.left;
     const mouseY = event.clientY - rect.top;
 
     const cellX = Math.floor(mouseX / canvas.width * GRID_SIZE_X);
-    const cellY = Math.floor(mouseY / canvas.height * GRID_SIZE_Y);
+    const cellY = GRID_SIZE_Y - 1 - Math.floor(mouseY / canvas.height * GRID_SIZE_Y); // flipped
 
-    const indexes = [coordsToIndex(cellX, cellY),
-    coordsToIndex(cellX + 1, cellY),
-    coordsToIndex(cellX, cellY + 1),
-    coordsToIndex(cellX - 1, cellY),
-    coordsToIndex(cellX, cellY - 1)];
+    clickPosArray[0] = 1;            // mouse pressed
+    clickPosArray[1] = cellX;
+    clickPosArray[2] = cellY;
+    clickPosArray[3] = RADIUS_SQRED;
 
-    indexes.forEach(index => {
-        if (index != null) {
-            cellsToAdd.add(index);
-        }
-    });
-
+    device.queue.writeBuffer(clickPosBuffer, 0, clickPosArray);
 }
 
 function coordsToIndex(x, y) {
@@ -524,6 +543,10 @@ function resizeGrid(newSizeX, newSizeY) {
             {
                 binding: 2,
                 resource: { buffer: newCellStateStorage[1] }
+            },
+            {
+                binding: 3,
+                resource: { buffer: clickPosBuffer}
             }
             ],
         }),
@@ -541,6 +564,10 @@ function resizeGrid(newSizeX, newSizeY) {
             {
                 binding: 2,
                 resource: { buffer: newCellStateStorage[0] }
+            },
+            {
+                binding: 3,
+                resource: { buffer: clickPosBuffer}
             }
             ],
         })
