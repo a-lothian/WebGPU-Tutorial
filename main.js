@@ -2,7 +2,7 @@ let PIXELS_PER_CELL = 4;
 let GRID_SIZE_X = 64;
 let GRID_SIZE_Y = 64;
 let TARGET_SIM_RATE = 1;
-let RADIUS_SQRED = 8; // brush radius squared
+let BRUSH_RADIUS_SQRED = 8; // brush radius squared
 const WORKGROUP_SIZE = 8;
 let step = 0; // count number of frames simulated
 let simAcc = 0; // accumulator to allow fractional simulation speeds
@@ -20,6 +20,9 @@ const cellScaleMeter = document.querySelector("#cell-size-meter");
 
 const simSpeed = document.querySelector("#sim-speed");
 const simSpeedMeter = document.querySelector("#sim-speed-meter");
+
+const brushSize = document.querySelector("#brush-size");
+const brushSizeMeter = document.querySelector("#brush-size-meter");
 
 const fpsMeter = document.querySelector("#fps-meter");
 
@@ -102,7 +105,7 @@ const uniformBuffer = device.createBuffer({
 
 device.queue.writeBuffer(uniformBuffer, 0, uniformArray); // write to buffer
 
-const clickPosArray = new Uint32Array([0, GRID_SIZE_X, GRID_SIZE_Y, RADIUS_SQRED]); // store clickStatus, x, y, radius**2 info for spawning new cells with mouse
+const clickPosArray = new Uint32Array([0, GRID_SIZE_X, GRID_SIZE_Y, BRUSH_RADIUS_SQRED]); // store clickStatus, x, y, radius**2 info for spawning new cells with mouse
 const clickPosBuffer = device.createBuffer({
     label: "Mouse Info",
     size: clickPosArray.byteLength,
@@ -443,6 +446,11 @@ simSpeed.addEventListener("input", (e) => {
     simSpeedMeter.textContent = TARGET_SIM_RATE;
 })
 
+brushSize.addEventListener("input", (e) => {
+    BRUSH_RADIUS_SQRED = brushSize.value*brushSize.value;
+    brushSizeMeter.textContent = brushSize.value;
+})
+
 //report the mouse position on click
 canvas.addEventListener("mousedown", (e) => {
     isDragging = true;
@@ -480,7 +488,7 @@ function handleMouseInteraction(event) {
     clickPosArray[0] = 1;            // mouse pressed
     clickPosArray[1] = cellX;
     clickPosArray[2] = cellY;
-    clickPosArray[3] = RADIUS_SQRED;
+    clickPosArray[3] = BRUSH_RADIUS_SQRED;
 
     device.queue.writeBuffer(clickPosBuffer, 0, clickPosArray);
 }
