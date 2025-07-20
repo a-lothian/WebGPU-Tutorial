@@ -167,6 +167,19 @@ const simulationShaderModule = device.createShaderModule({
             return u32(dx*dx + dy*dy);
         }
 
+        // pgc random algorithm from 
+        // https://gist.github.com/munrocket/236ed5ba7e409b8bdf1ff6eca5dcdc39
+
+        fn pcg_hash(n: u32) -> u32 {
+            var h = n * 747796405u + 2891336453u;
+            h = ((h >> ((h >> 28u) + 4u)) ^ h) * 277803737u;
+            return (h >> 22u) ^ h;
+        }
+
+        fn rand01(seed: u32) -> f32 {
+        return f32(pcg_hash(seed)) * (1.0 / 4294967295.0);
+        }
+
         fn calculateCell(cell: vec2u) -> u32 {
             let activeNeighbors = cellActive(cell.x+1, cell.y+1) +
                 cellActive(cell.x+1, cell.y) +
@@ -210,7 +223,16 @@ const simulationShaderModule = device.createShaderModule({
                     let radius = mouseInfo.radiusSquared;
 
                     if (dist <= radius) {
-                        cellStateOut[i] = 1; // cell is within brush
+                        let softness = 1.0 - clamp(f32(dist) / f32(radius), 0.0, 1.0);
+                        let rnd = rand01(i);
+
+                        if (rnd < softness) {
+                            cellStateOut[i] = 1;
+                        } else {
+                            cellStateOut[i] = 0;
+                        }
+
+                        //cellStateOut[i] = 1;
                     } else {
                         cellStateOut[i] = calculateCell(cell.xy);
                     }
@@ -279,7 +301,7 @@ const bindGroupLayout = device.createBindGroupLayout({
     }, {
         binding: 3,
         visibility: GPUShaderStage.COMPUTE,
-        buffer: {type: "uniform"}
+        buffer: { type: "uniform" }
     }]
 });
 
@@ -447,7 +469,7 @@ simSpeed.addEventListener("input", (e) => {
 })
 
 brushSize.addEventListener("input", (e) => {
-    BRUSH_RADIUS_SQRED = brushSize.value*brushSize.value;
+    BRUSH_RADIUS_SQRED = brushSize.value * brushSize.value;
     brushSizeMeter.textContent = brushSize.value;
 })
 
@@ -554,7 +576,7 @@ function resizeGrid(newSizeX, newSizeY) {
             },
             {
                 binding: 3,
-                resource: { buffer: clickPosBuffer}
+                resource: { buffer: clickPosBuffer }
             }
             ],
         }),
@@ -575,7 +597,7 @@ function resizeGrid(newSizeX, newSizeY) {
             },
             {
                 binding: 3,
-                resource: { buffer: clickPosBuffer}
+                resource: { buffer: clickPosBuffer }
             }
             ],
         })
